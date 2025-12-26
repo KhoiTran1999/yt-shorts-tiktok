@@ -105,45 +105,51 @@ def get_channel_id_from_url(url):
     except: return None
 
 # === 5. WORKER CHÍNH ===
-def sync_full_channel(channel_url):
-    real_channel_id = get_channel_id_from_url(channel_url)
-    if not real_channel_id:
-        print(f"❌ Worker: Không lấy được ID từ {channel_url}")
-        return
-
-    print(f"🚀 Worker: Bắt đầu quét video kênh {real_channel_id}...")
-
+def sync_channel_data(channel_id):
+    """Hàm cốt lõi: Quét video từ ID kênh và lưu vào DB"""
+    print(f"🚀 Worker: Bắt đầu quét video kênh {channel_id}...")
     try:
-        # Lấy 30 video thôi cho nhanh (scrapetube)
-        videos = scrapetube.get_channel(channel_id=real_channel_id, content_type="shorts", sleep=1, limit=30)
+        # Lấy 30 video mới nhất
+        videos = scrapetube.get_channel(channel_id=channel_id, content_type="shorts", sleep=1, limit=30)
         count = 0
         for video in videos:
             try:
                 if 'videoId' not in video: continue
                 video_id = video['videoId']
                 
-                # --- LOGIC MỚI Ở ĐÂY ---
                 title = extract_video_info(video)
-                # -----------------------
-
                 thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
                 
-                # Nếu title vẫn Unknown sau tất cả nỗ lực -> Bỏ qua không lưu rác
-                if title == "Unknown Title":
-                    continue
+                if title == "Unknown Title": continue
 
-                add_video_to_db(real_channel_id, video_id, title, thumbnail_url)
+                add_video_to_db(channel_id, video_id, title, thumbnail_url)
                 count += 1
-                if count % 5 == 0: print(f"   -> Worker: Đã lưu {count} videos...")
             except Exception as e: 
                 continue
     except Exception as e:
         print(f"⚠️ Worker: Lỗi khi cào video: {e}")
 
-    print(f"✅ Worker: Quét xong {count} video.")
+    print(f"✅ Worker: Quét xong {count} video cho kênh {channel_id}.")
 
-    new_name, new_avatar = get_channel_details(real_channel_id)
-    add_channel_to_db(real_channel_id, new_name, new_avatar)
-    print(f"✨ Đã cập nhật: {new_name}")
+    # Cập nhật lại Avatar/Tên kênh luôn cho mới
+    new_name, new_avatar = get_channel_details(channel_id)
+    add_channel_to_db(channel_id, new_name, new_avatar)
     
+    return True
+
+def sync_full_channel(channel_url):
+    """Dùng cho lúc Add Channel (Có URL)"""
+    real_channel_id = get_channel_id_from_url(channel_url)
+    if not real_channel_id:
+        print(f"❌ Worker: Không lấy được ID từ {channel_url}")
+        return
+    
+    # Gọi hàm chung
+    sync_channel_data(real_channel_id)
     return real_channel_id
+
+def sync_channel_by_id(channel_id):
+    """Dùng cho lúc Reload (Chỉ có ID)"""
+    sync_channel_data(channel_id)
+
+

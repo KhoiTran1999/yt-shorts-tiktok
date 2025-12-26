@@ -137,6 +137,20 @@ def add_channel(request: ChannelRequest, background_tasks: BackgroundTasks):
     
     return {"status": "success", "channel_id": channel_id, "message": "Đã thêm kênh! Đang tải video..."}
 
+@app.post("/api/channels/{channel_id}/sync")
+def sync_specific_channel(channel_id: str, background_tasks: BackgroundTasks):
+    """
+    API để user chủ động làm mới 1 kênh.
+    Chạy ngầm trong background (không bắt user đợi).
+    """
+    if not db.is_channel_exist(channel_id):
+         raise HTTPException(status_code=404, detail="Kênh không tồn tại")
+    
+    # Đẩy vào worker chạy ngầm
+    background_tasks.add_task(worker.sync_channel_by_id, channel_id)
+    
+    return {"status": "ok", "message": f"Đang cập nhật kênh {channel_id}..."}
+
 @app.get("/api/subscriptions")
 def get_subscriptions(user_id: str):
     sub_ids = db.get_user_subscriptions(user_id)
