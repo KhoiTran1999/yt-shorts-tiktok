@@ -1,0 +1,94 @@
+/* frontend/src/App.css */
+:root {
+  --tiktok-black: #000000;
+  --tiktok-gray: #161823;
+}
+
+/* BẮT BUỘC: Set chiều cao 100% cho toàn bộ chuỗi cha */
+html, body, #root {
+  height: 100%; 
+  margin: 0;
+  padding: 0;
+  background-color: var(--tiktok-black);
+  color: white;
+  overflow: hidden; /* Cấm thanh cuộn mặc định của trình duyệt */
+}
+
+.app-container {
+  height: 100%;
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  background-color: var(--tiktok-black);
+}
+
+.video-feed {
+  width: 100%;
+  max-width: 480px; /* Kích thước chuẩn mobile */
+  height: 100%;
+  background-color: var(--tiktok-gray);
+  position: relative;
+}
+
+/* QUAN TRỌNG: Class của Swiper phải full chiều cao */
+.mySwiper {
+  width: 100%;
+  height: 100%;
+}
+
+.swiper-slide {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  position: relative;
+}
+
+/* Video Card */
+.video-iframe {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Vẫn giữ dòng này để swiper hoạt động */
+  pointer-events: none; 
+}
+
+/* Biến con trỏ chuột thành hình bàn tay để user biết là bấm được */
+.video-card {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  cursor: pointer; 
+}
+
+/* Icon Play hiện giữa màn hình khi pause */
+.play-icon-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  pointer-events: none; /* Icon không chặn click */
+  text-shadow: 0 0 10px rgba(0,0,0,0.5);
+}
+
+.video-info {
+  position: absolute;
+  bottom: 80px;
+  left: 15px;
+  right: 60px;
+  z-index: 10;
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  /* Quan trọng: Cho phép bấm xuyên qua text để vẫn pause được khi bấm vào chữ */
+  pointer-events: none; 
+}
+
+.video-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2; /* Cắt dòng nếu tiêu đề quá dài */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

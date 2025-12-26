@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+redis
+scrapetube
+requests
+xmltodict
+python-dotenv
