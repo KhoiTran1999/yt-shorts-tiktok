@@ -19,7 +19,7 @@ function App() {
   const [showSubsModal, setShowSubsModal] = useState(false);
 
   // --- TRẠNG THÁI TOÀN CỤC ---
-  const [isCaptionOn, setIsCaptionOn] = useState(false);
+  const [isCaptionOn, setIsCaptionOn] = useState(true);
   const [isMutedGlobal, setIsMutedGlobal] = useState(true); // <--- MỚI: Mặc định tắt tiếng
 
   const handleLoginSuccess = (userData) => {

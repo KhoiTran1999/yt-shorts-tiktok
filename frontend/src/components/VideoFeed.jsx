@@ -23,10 +23,9 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
   const playerRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false); 
-  const [isVideoLoaded, setIsVideoLoaded] = useState(false); // Biến quan trọng để hiển thị loading
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false); 
   const [hasCountedView, setHasCountedView] = useState(false);
 
-  // Load video list
   const fetchVideos = async () => {
     if (loading || !hasMore) return;
     setLoading(true);
@@ -48,13 +47,28 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
 
   // --- PLAYER CONTROLLER ---
   
+  // [FIX CAPTION 1] Lắng nghe sự kiện bật/tắt caption để điều khiển Player
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    // YouTube API: loadModule('captions') để bật, unloadModule để tắt
+    if (isCaptionOn) {
+        if (typeof player.loadModule === 'function') {
+            player.loadModule('captions');  
+        }
+    } else {
+        if (typeof player.unloadModule === 'function') {
+            player.unloadModule('captions');
+        }
+    }
+  }, [isCaptionOn]); // Chạy lại mỗi khi user bấm nút Caption
+
   const handleSlideChange = (swiper) => {
     const newIndex = swiper.activeIndex;
     setActiveIndex(newIndex);
-    
-    // Reset ngay lập tức khi lướt sang video mới
     setHasCountedView(false);
-    setIsVideoLoaded(false); // -> VideoCard sẽ hiện Spinner ngay lúc này
+    setIsVideoLoaded(false);
 
     if (videos[newIndex] && playerRef.current) {
         playerRef.current.loadVideoById(videos[newIndex].id);
@@ -66,18 +80,23 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
     }
   };
 
-  // [MỚI] Hàm xử lý tua video (+/- 5s)
   const handleSeek = (seconds) => {
       const player = playerRef.current;
       if (player && typeof player.seekTo === 'function') {
-          // getCurrentTime() trả về giây
-          const currentTime = player.getCurrentTime();
-          player.seekTo(currentTime + seconds, true);
+          player.seekTo(player.getCurrentTime() + seconds, true);
       }
   };
 
   const onPlayerReady = (event) => {
     playerRef.current = event.target;
+    
+    // [FIX CAPTION 2] Đồng bộ trạng thái caption ngay khi player vừa load xong
+    if (isCaptionOn) {
+         if (typeof event.target.loadModule === 'function') event.target.loadModule('captions');
+    } else {
+         if (typeof event.target.unloadModule === 'function') event.target.unloadModule('captions');
+    }
+
     if (videos.length > 0) {
         event.target.loadVideoById(videos[0].id);
         if(isMutedGlobal) event.target.mute();
@@ -85,12 +104,12 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
   };
 
   const onPlayerStateChange = (event) => {
-    if (event.data === 1) { // Playing
+    if (event.data === 1) { 
         setIsPlaying(true);
-        setIsVideoLoaded(true); // -> VideoCard sẽ ẩn Spinner, hiện nút Pause (nếu cần)
-    } else if (event.data === 2) { // Paused
+        setIsVideoLoaded(true);
+    } else if (event.data === 2) { 
         setIsPlaying(false);
-    } else if (event.data === 0) { // Ended
+    } else if (event.data === 0) { 
        const swiper = document.querySelector('.mySwiper').swiper;
        if(swiper) swiper.slideNext();
     }
@@ -127,9 +146,20 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
     }
   };
 
+  // [FIX CAPTION 3] Thêm cc_load_policy vào playerVars
   const playerOpts = {
     height: '100%', width: '100%',
-    playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, modestbranding: 1 }
+    playerVars: { 
+        autoplay: 1, 
+        controls: 0, 
+        playsinline: 1, 
+        rel: 0, 
+        disablekb: 1, 
+        fs: 0, 
+        modestbranding: 1,
+        cc_load_policy: 1, // BẮT BUỘC: Cho phép load module caption
+        iv_load_policy: 3  // Ẩn các annotation (ghi chú) của video cho đỡ rối
+    }
   };
 
   return (
@@ -162,7 +192,7 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
                 onTogglePlay={handleScreenClick}
                 isCaptionOn={isCaptionOn}
                 onToggleCaption={onToggleCaption}
-                onSeek={handleSeek} // [MỚI] Truyền hàm seek xuống
+                onSeek={handleSeek}
             />
           </SwiperSlide>
         ))}
