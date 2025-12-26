@@ -1,7 +1,7 @@
+// frontend/src/components/VideoCard.jsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import YouTube from 'react-youtube';
 import axios from 'axios';
-// [AN TOÀN] Chỉ giữ lại các icon cơ bản nhất
 import { FaPlay, FaVolumeMute, FaClosedCaptioning, FaRedo, FaUndo } from 'react-icons/fa';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -21,14 +21,40 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
       setShouldLoadPlayer(true);
       setIsLoadingInternal(true);
     } else {
+      // Khi không còn active, đợi 500ms rồi gỡ player
       const timer = setTimeout(() => {
          setShouldLoadPlayer(false);
          setIsPlaying(false);
          setIsReady(false);
+         playerRef.current = null; // [FIX 1] Xóa tham chiếu player ngay lập tức để tránh gọi nhầm
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [isActive]);
+
+  // [FIX 2] Thêm cleanup khi component bị unmount đột ngột (do Swiper)
+  useEffect(() => {
+      return () => {
+          playerRef.current = null;
+      }
+  }, []);
+
+  // Sync Mute state
+  useEffect(() => {
+    // Chỉ gọi khi playerRef còn tồn tại và đang ready
+    if (isReady && playerRef.current) {
+        if (isMutedGlobal) {
+            safePlayerCall('mute');
+        } else {
+            if (isActive) {
+                safePlayerCall('unMute');
+                if (playerRef.current.setVolume) {
+                    try { playerRef.current.setVolume(100); } catch(e){}
+                }
+            }
+        }
+    }
+  }, [isMutedGlobal, isActive, isReady]);
 
   const recordView = () => {
     if (!hasCountedView) {
@@ -37,23 +63,23 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
     }
   };
 
+  // [FIX 3] Hàm gọi player an toàn tuyệt đối
   const safePlayerCall = (action) => {
     const player = playerRef.current;
-    if (!player || typeof player[action] !== 'function') return;
-    try {
-        const iframe = player.getIframe();
-        if (iframe && iframe.isConnected) player[action]();
-    } catch (e) { }
-  };
-
-  const syncVolumeState = () => {
-    const player = playerRef.current;
     if (!player) return;
-    if (isMutedGlobal) {
-      safePlayerCall('mute');
-    } else {
-      safePlayerCall('unMute');
-      if (player.setVolume) player.setVolume(100); 
+
+    try {
+        // Kiểm tra xem hàm có tồn tại không TRONG try-catch để tránh crash
+        if (typeof player[action] === 'function') {
+            // Kiểm tra iframe còn sống không
+            const iframe = player.getIframe ? player.getIframe() : null;
+            if (iframe && iframe.isConnected) {
+                player[action]();
+            }
+        }
+    } catch (e) { 
+        // Nuốt lỗi để không làm đen màn hình
+        console.warn("YouTube Player Warning (Ignored):", e);
     }
   };
 
@@ -75,14 +101,21 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
   }), [isCaptionOn]);
 
   const onReady = (event) => {
+    // Nếu component đã bị hủy trong lúc đang load, thì thôi không làm gì cả
+    if (!shouldLoadPlayer) return;
+
     playerRef.current = event.target;
     setIsReady(true);
-    if (isMutedGlobal) event.target.mute();
-    else {
-      event.target.unMute();
-      event.target.setVolume(100);
+    
+    // Logic PWA: Check mute global
+    if (isMutedGlobal) {
+        safePlayerCall('mute'); 
+    } else {
+        safePlayerCall('unMute');
+        try { event.target.setVolume(100); } catch(e){}
     }
-    event.target.playVideo();
+    
+    safePlayerCall('playVideo');
     startSafetyTimeout();
   };
 
@@ -97,21 +130,26 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
   };
 
   const onStateChange = (event) => {
-    if (event.data === 1) { 
+    // Nếu playerRef đã null (đã unmount), bỏ qua mọi sự kiện
+    if (!playerRef.current && !isActive) return;
+
+    if (event.data === 1) { // Playing
       setIsPlaying(true);
       setIsLoadingInternal(false);
       if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
-      syncVolumeState();
+      
+      // Double check âm thanh
+      if (!isMutedGlobal) safePlayerCall('unMute');
     } 
-    else if (event.data === 3) { 
+    else if (event.data === 3) { // Buffering
       setIsLoadingInternal(true);
       startSafetyTimeout();
     } 
-    else if (event.data === 2) { 
+    else if (event.data === 2) { // Paused
       setIsPlaying(false);
       setIsLoadingInternal(false);
     } 
-    else if (event.data === 0) { 
+    else if (event.data === 0) { // Ended
       setIsPlaying(false);
       if (isActive) {
           recordView();
@@ -125,14 +163,15 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
     if (isActive && isPlaying && !hasCountedView) {
       interval = setInterval(() => {
         const player = playerRef.current;
-        if (player && typeof player.getCurrentTime === 'function') {
-          try {
-            if (player.getCurrentTime() >= 15) {
-              recordView();
-              clearInterval(interval);
+        // Thêm try-catch cho getCurrentTime
+        try {
+            if (player && typeof player.getCurrentTime === 'function') {
+                if (player.getCurrentTime() >= 15) {
+                  recordView();
+                  clearInterval(interval);
+                }
             }
-          } catch(e){}
-        }
+        } catch(e){}
       }, 1000);
     }
     return () => { if (interval) clearInterval(interval); };
@@ -143,10 +182,10 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
 
     if (isMutedGlobal) {
         if (onToggleMuteGlobal) onToggleMuteGlobal(false);
-        setTimeout(() => {
-            safePlayerCall('unMute'); 
-            if(playerRef.current) playerRef.current.setVolume(100);
-        }, 100);
+        safePlayerCall('unMute'); 
+        if(playerRef.current) {
+             try { playerRef.current.setVolume(100); } catch(e){}
+        }
     } else {
       if (isPlaying) safePlayerCall('pauseVideo');
       else safePlayerCall('playVideo');
@@ -156,8 +195,10 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
   const handleSeek = (e, sec) => {
     e.stopPropagation();
     const player = playerRef.current;
-    if (player && player.seekTo) {
-        player.seekTo(player.getCurrentTime() + sec, true);
+    if (player && typeof player.seekTo === 'function') {
+        try {
+            player.seekTo(player.getCurrentTime() + sec, true);
+        } catch(e){}
     }
   };
 
@@ -179,13 +220,15 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
                 opts={opts}
                 onReady={onReady}
                 onStateChange={onStateChange}
+                // Thêm onError để bắt lỗi nội bộ nếu có
+                onError={(e) => console.warn("YouTube Internal Error:", e)}
                 className="video-iframe"
                 iframeClassName="video-iframe"
             />
         </div>
       )}
 
-      {/* CSS SPINNER THAY THẾ CHO ICON */}
+      {/* SPINNER */}
       {shouldLoadPlayer && (!isReady || isLoadingInternal) && (
          <div style={{
              position:'absolute', top:0, left:0, width: '100%', height: '100%',
@@ -231,7 +274,7 @@ const VideoCard = ({ video, isActive, onEnded, isCaptionOn, onToggleCaption, isM
             {isMutedGlobal && isActive && (
                 <div className="play-icon-overlay">
                   <FaVolumeMute size={40} color="white" style={{ opacity: 0.8 }} />
-                  <p style={{color:'white', marginTop: 10, fontSize: 12}}>Bấm để bật tiếng</p>
+                  <p style={{color:'white', marginTop: 10, fontSize: 12}}>Bấm hoặc lướt để bật tiếng</p>
                 </div>
             )}
 

@@ -57,7 +57,15 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
     fetchVideos(); 
   }, [userId]);
 
-  const handleSlideChange = (swiper) => {
+const handleSlideChange = (swiper) => {
+    // [LOGIC PWA MỚI] 
+    // Nếu người dùng lướt sang video khác (activeIndex > 0) và đang bị Mute global
+    // thì tự động mở tiếng cho toàn bộ App.
+    // Hành động "vuốt" được tính là tương tác người dùng, trình duyệt sẽ cho phép phát tiếng.
+    if (swiper.activeIndex > 0 && isMutedGlobal) {
+        if (onToggleMuteGlobal) onToggleMuteGlobal(false);
+    }
+
     // Load thêm khi còn cách cuối 2 video
     if (swiper.activeIndex >= videos.length - 2 && hasMore && !loading) {
       fetchVideos();
