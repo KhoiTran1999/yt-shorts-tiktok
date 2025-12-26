@@ -1,70 +1,84 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import YouTube from 'react-youtube';
-import { FaPlay, FaVolumeMute } from 'react-icons/fa';
+import { FaPlay, FaVolumeMute, FaClosedCaptioning } from 'react-icons/fa';
 
-const VideoCard = ({ video, isActive, onEnded, index }) => {
-  const [isPlaying, setIsPlaying] = useState(false); // Mặc định là false để tránh icon Play nháy sai
-  
-  // Chỉ video đầu tiên (index 0) mới bị Mute mặc định để trình duyệt cho phép tự chạy
-  const [isMuted, setIsMuted] = useState(index === 0); 
-  
+const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCaption }) => {
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(index === 0);
+  const [isReady, setIsReady] = useState(false);
+
   const playerRef = useRef(null);
+
+  // --- HÀM AN TOÀN: Kiểm tra DOM trước khi gọi YouTube API ---
+  const safePlayerCall = (action) => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    try {
+      // Quan trọng: Kiểm tra xem iframe có còn kết nối với trang web không
+      const iframe = player.getIframe();
+      if (iframe && iframe.isConnected) {
+        if (action === 'play') player.playVideo();
+        if (action === 'pause') player.pauseVideo();
+        if (action === 'mute') player.mute();
+        if (action === 'unmute') player.unMute();
+      }
+    } catch (error) {
+      console.warn("YouTube Player Error (Ignored):", error);
+    }
+  };
+  // ----------------------------------------------------------
 
   const opts = useMemo(() => ({
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: 0, // <--- SỬA QUAN TRỌNG: Tắt tự chạy của iframe. Để React tự lo.
+      autoplay: 0,
       controls: 0,
       rel: 0,
       showinfo: 0,
       modestbranding: 1,
       disablekb: 1,
       fs: 0,
+      cc_load_policy: isCaptionOn ? 1 : 0, 
       origin: window.location.origin,
     },
-  }), []);
+  }), [isCaptionOn]);
 
   const onReady = (event) => {
     playerRef.current = event.target;
-    
-    // Logic Mute
+    setIsReady(true);
+
     if (index === 0) {
-      event.target.mute();
+      safePlayerCall('mute');
       setIsMuted(true);
     } else {
-      event.target.unMute();
+      safePlayerCall('unmute');
       setIsMuted(false);
     }
 
-    // Logic Play: Chỉ play nếu slide này đang Active
     if (isActive) {
-      event.target.playVideo();
-      setIsPlaying(true);
+      safePlayerCall('play');
     }
   };
 
   const onStateChange = (event) => {
-    // ENDED (0)
-    if (event.data === 0) { 
-      if (isActive && onEnded) onEnded();
-    }
-    // PLAYING (1)
+    // Nếu video đã kết thúc và đang active -> Gọi callback để next slide
+    if (event.data === 0 && isActive && onEnded) onEnded();
     if (event.data === 1) setIsPlaying(true);
-    // PAUSED (2)
     if (event.data === 2) setIsPlaying(false);
   };
 
-  // useEffect này cực kỳ quan trọng:
-  // Nó giám sát việc lướt lên/xuống. 
-  // Nếu isActive = false (lướt đi chỗ khác) -> Lập tức Pause ngay.
+  // useEffect: Xử lý khi lướt qua lại
   useEffect(() => {
     if (!playerRef.current) return;
 
     if (isActive) {
-      playerRef.current.playVideo();
+      safePlayerCall('play');
+      setIsPlaying(true);
     } else {
-      playerRef.current.pauseVideo();
+      safePlayerCall('pause');
+      setIsPlaying(false);
     }
   }, [isActive]);
 
@@ -72,15 +86,21 @@ const VideoCard = ({ video, isActive, onEnded, index }) => {
     if (!playerRef.current) return;
 
     if (isMuted) {
-      playerRef.current.unMute();
+      safePlayerCall('unmute');
       setIsMuted(false);
     } else {
+      // Nếu đang play thì pause, đang pause thì play
       if (isPlaying) {
-        playerRef.current.pauseVideo();
+        safePlayerCall('pause');
       } else {
-        playerRef.current.playVideo();
+        safePlayerCall('play');
       }
     }
+  };
+
+  const handleToggleCaptions = (e) => {
+    e.stopPropagation(); 
+    if (onToggleCaption) onToggleCaption();
   };
 
   return (
@@ -92,27 +112,54 @@ const VideoCard = ({ video, isActive, onEnded, index }) => {
         onStateChange={onStateChange}
         className="video-iframe"
         iframeClassName="video-iframe"
+        // Thêm loading="lazy" để tối ưu
+        loading="lazy"
       />
 
+      {/* Button CC */}
+      {isReady && (
+        <button 
+          onClick={handleToggleCaptions}
+          style={{
+            position: 'absolute', top: 20, left: 20, zIndex: 50,
+            background: isCaptionOn ? 'rgba(254, 44, 85, 0.8)' : 'rgba(0, 0, 0, 0.4)',
+            border: '1px solid rgba(255,255,255,0.3)', borderRadius: '4px',
+            color: 'white', padding: '5px 8px', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: '5px',
+            fontSize: '12px', fontWeight: 'bold', transition: 'all 0.2s'
+          }}
+        >
+          <FaClosedCaptioning size={16} />
+          {isCaptionOn ? 'ON' : 'OFF'}
+        </button>
+      )}
+
+      {/* Icon Mute */}
       {isMuted && isActive && isPlaying && (
         <div className="play-icon-overlay">
           <FaVolumeMute size={40} color="white" style={{ opacity: 0.8 }} />
-          <p style={{color: 'white', marginTop: '10px', fontWeight: 'bold', textShadow: '1px 1px 2px black'}}>Bấm để bật tiếng</p>
         </div>
       )}
 
-      {/* Logic hiện nút Play: Chỉ hiện khi ĐÃ SẴN SÀNG (playerRef có) và ĐANG PAUSE */}
-      {!isPlaying && isActive && !isMuted && playerRef.current && (
+      {/* Icon Play */}
+      {isReady && !isPlaying && isActive && !isMuted && (
         <div className="play-icon-overlay">
           <FaPlay size={50} color="white" style={{ opacity: 0.8 }} />
         </div>
       )}
 
       <div className="video-info">
-        <h4 style={{ margin: '0 0 5px 0', fontSize: '15px', color: '#eee', textShadow: '1px 1px 2px black' }}>
-           {video.channel_name || "Channel"}
-        </h4>
-        <p className="video-title" style={{ margin: 0, fontSize: '14px', fontWeight: 'normal', textShadow: '1px 1px 2px black' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+          <img 
+            src={video.channel_avatar || "https://via.placeholder.com/150"} 
+            alt="Channel"
+            style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px solid white', objectFit: 'cover' }} 
+          />
+          <h4 style={{ margin: 0, fontSize: '16px', color: '#fff', textShadow: '1px 1px 2px black', fontWeight: 'bold' }}>
+             {video.channel_name || "Channel"}
+          </h4>
+        </div>
+        <p className="video-title" style={{ margin: 0, fontSize: '14px', fontWeight: 'normal', textShadow: '1px 1px 2px black', lineHeight: '1.4' }}>
            {video.title}
         </p>
       </div>
