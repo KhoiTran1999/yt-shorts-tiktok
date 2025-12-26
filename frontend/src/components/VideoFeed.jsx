@@ -45,6 +45,25 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
     fetchVideos();
   }, [userId]);
 
+  useEffect(() => {
+    // Chỉ chạy khi đã có video và Player đã sẵn sàng
+    if (videos.length > 0 && playerRef.current) {
+        // Kiểm tra xem Player đã đang chạy video nào chưa để tránh load lại
+        const playerState = playerRef.current.getPlayerState();
+        
+        // Nếu Player chưa bắt đầu (unstarted: -1) hoặc đang chờ (cued: 5)
+        // Lưu ý: activeIndex phải là 0 (người dùng chưa cuộn đi đâu)
+        if ((playerState === -1 || playerState === 5) && activeIndex === 0) {
+            playerRef.current.loadVideoById(videos[0].id);
+            if (isMutedGlobal) {
+                playerRef.current.mute();
+            } else {
+                playerRef.current.unMute();
+            }
+        }
+    }
+  }, [videos]); // Chạy lại mỗi khi danh sách video thay đổi
+
   // --- PLAYER CONTROLLER ---
   
   // [FIX CAPTION 1] Lắng nghe sự kiện bật/tắt caption để điều khiển Player
