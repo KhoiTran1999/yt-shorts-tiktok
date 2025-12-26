@@ -5,3 +5,4 @@ scrapetube
 requests
 xmltodict
 python-dotenv
+google-auth

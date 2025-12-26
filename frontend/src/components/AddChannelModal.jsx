@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { FaTimes, FaSpinner } from 'react-icons/fa';
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 // THAY ĐỔI: Nhận props isOpen và onClose từ App.jsx
 const AddChannelModal = ({ userId, onChannelAdded, isOpen, onClose }) => {
@@ -16,7 +17,7 @@ const AddChannelModal = ({ userId, onChannelAdded, isOpen, onClose }) => {
     setMessage('Đang kết nối với máy chủ...');
 
     try {
-      await axios.post('http://localhost:8000/api/channels', {
+      await axios.post(`${API_URL}/api/channels`, {
         url: url,
         user_id: userId
       });

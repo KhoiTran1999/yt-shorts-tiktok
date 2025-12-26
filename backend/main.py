@@ -7,10 +7,14 @@ from typing import List, Optional
 import database as db
 import worker
 import random
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI()
 
-GOOGLE_CLIENT_ID = "237320924792-b8jugiphuech1l8mjr7ieecopc0829it.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 origins = ["http://localhost:3000", "http://localhost:5173"]
 

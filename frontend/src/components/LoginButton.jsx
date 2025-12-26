@@ -1,13 +1,14 @@
 import React from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import axios from 'axios';
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 const LoginButton = ({ onLoginSuccess }) => {
   
   const handleSuccess = async (credentialResponse) => {
     try {
       // Gửi token về Backend để verify và lấy info user
-      const res = await axios.post('http://localhost:8000/api/auth/google', {
+      const res = await axios.post(`${API_URL}/api/auth/google`, {
         token: credentialResponse.credential
       });
       

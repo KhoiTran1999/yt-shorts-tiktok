@@ -1,9 +1,11 @@
 import redis
 import json
 import time
+import os
 
 # Kết nối Redis
-r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+r = redis.from_url(REDIS_URL, decode_responses=True)
 
 # === CÁC HÀM XỬ LÝ CHANNEL ===
 def add_channel_to_db(channel_id, name, avatar_url):

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FaTrash, FaTimes } from 'react-icons/fa';
+const API_URL = import.meta.env.VITE_API_BASE_URL;
 
 // THAY ĐỔI: Nhận props isOpen và onClose
 const SubsModal = ({ userId, onListChanged, isOpen, onClose }) => {
@@ -8,7 +9,7 @@ const SubsModal = ({ userId, onListChanged, isOpen, onClose }) => {
 
   const loadSubs = async () => {
     try {
-      const res = await axios.get(`http://localhost:8000/api/subscriptions?user_id=${userId}`);
+      const res = await axios.get(`${API_URL}/api/subscriptions?user_id=${userId}`);
       setChannels(res.data);
     } catch (err) {
       console.error(err);
@@ -25,7 +26,7 @@ const SubsModal = ({ userId, onListChanged, isOpen, onClose }) => {
   const handleUnsub = async (channelId) => {
     if (!confirm("Bạn chắc chắn muốn bỏ theo dõi kênh này?")) return;
     try {
-      await axios.post('http://localhost:8000/api/unsubscribe', {
+      await axios.post(`${API_URL}/api/unsubscribe`, {
         user_id: userId,
         channel_id: channelId
       });

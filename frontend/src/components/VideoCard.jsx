@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import YouTube from 'react-youtube';
-import { FaPlay, FaVolumeMute, FaClosedCaptioning } from 'react-icons/fa';
+import { FaPlay, FaVolumeMute, FaClosedCaptioning, FaRedo, FaUndo } from 'react-icons/fa'; // <--- 1. Import icon tua
 
 const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCaption }) => {
   const [isPlaying, setIsPlaying] = useState(true);
@@ -9,13 +9,12 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
 
   const playerRef = useRef(null);
 
-  // --- HÀM AN TOÀN: Kiểm tra DOM trước khi gọi YouTube API ---
+  // --- Hàm gọi API an toàn (Giữ nguyên) ---
   const safePlayerCall = (action) => {
     const player = playerRef.current;
     if (!player) return;
 
     try {
-      // Quan trọng: Kiểm tra xem iframe có còn kết nối với trang web không
       const iframe = player.getIframe();
       if (iframe && iframe.isConnected) {
         if (action === 'play') player.playVideo();
@@ -27,7 +26,25 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
       console.warn("YouTube Player Error (Ignored):", error);
     }
   };
-  // ----------------------------------------------------------
+
+  // --- 2. HÀM XỬ LÝ TUA VIDEO (SEEK) ---
+  const handleSeek = (e, seconds) => {
+    e.stopPropagation(); // Chặn sự kiện nổi bọt (để không bị Play/Pause nhầm)
+    
+    const player = playerRef.current;
+    if (!player) return;
+
+    try {
+      const iframe = player.getIframe();
+      if (iframe && iframe.isConnected) {
+        // Lấy thời gian hiện tại và cộng/trừ thêm giây
+        const currentTime = player.getCurrentTime();
+        player.seekTo(currentTime + seconds, true);
+      }
+    } catch (error) {
+      console.warn("Seek error:", error);
+    }
+  };
 
   const opts = useMemo(() => ({
     height: '100%',
@@ -63,16 +80,13 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
   };
 
   const onStateChange = (event) => {
-    // Nếu video đã kết thúc và đang active -> Gọi callback để next slide
     if (event.data === 0 && isActive && onEnded) onEnded();
     if (event.data === 1) setIsPlaying(true);
     if (event.data === 2) setIsPlaying(false);
   };
 
-  // useEffect: Xử lý khi lướt qua lại
   useEffect(() => {
     if (!playerRef.current) return;
-
     if (isActive) {
       safePlayerCall('play');
       setIsPlaying(true);
@@ -84,12 +98,10 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
 
   const togglePlay = () => {
     if (!playerRef.current) return;
-
     if (isMuted) {
       safePlayerCall('unmute');
       setIsMuted(false);
     } else {
-      // Nếu đang play thì pause, đang pause thì play
       if (isPlaying) {
         safePlayerCall('pause');
       } else {
@@ -112,11 +124,10 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
         onStateChange={onStateChange}
         className="video-iframe"
         iframeClassName="video-iframe"
-        // Thêm loading="lazy" để tối ưu
         loading="lazy"
       />
 
-      {/* Button CC */}
+      {/* Button CC (Góc trái trên) */}
       {isReady && (
         <button 
           onClick={handleToggleCaptions}
@@ -132,6 +143,64 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
           <FaClosedCaptioning size={16} />
           {isCaptionOn ? 'ON' : 'OFF'}
         </button>
+      )}
+
+      {/* --- 3. CỤM NÚT TUA (BÊN PHẢI) --- */}
+      {isReady && (
+        <div style={{
+          position: 'absolute', 
+          right: '10px', 
+          top: '50%', 
+          transform: 'translateY(-50%)', // Căn giữa theo chiều dọc
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '20px', 
+          zIndex: 60 
+        }}>
+          {/* Nút Tua Lùi 5s */}
+          <button 
+            onClick={(e) => handleSeek(e, -5)}
+            style={{
+              background: 'rgba(0,0,0,0.4)', 
+              color: 'white', 
+              border: '1px solid rgba(255,255,255,0.2)', 
+              borderRadius: '50%', 
+              width: '45px', 
+              height: '45px',
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              cursor: 'pointer',
+              fontSize: '10px'
+            }}
+          >
+            <FaUndo size={14} style={{marginBottom: '2px'}}/>
+            -5s
+          </button>
+
+          {/* Nút Tua Tới 5s */}
+          <button 
+            onClick={(e) => handleSeek(e, 5)}
+            style={{
+              background: 'rgba(0,0,0,0.4)', 
+              color: 'white', 
+              border: '1px solid rgba(255,255,255,0.2)', 
+              borderRadius: '50%', 
+              width: '45px', 
+              height: '45px',
+              display: 'flex', 
+              flexDirection: 'column',
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              cursor: 'pointer',
+              fontSize: '10px'
+            }}
+          >
+            <FaRedo size={14} style={{marginBottom: '2px'}}/>
+            +5s
+          </button>
+        </div>
       )}
 
       {/* Icon Mute */}
