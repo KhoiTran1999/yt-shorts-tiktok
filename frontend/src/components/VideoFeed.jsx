@@ -1,14 +1,17 @@
-// frontend/src/components/VideoFeed.jsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Swiper, SwiperSlide } from 'swiper/react';
-import { Mousewheel, Keyboard } from 'swiper/modules';
+// 1. Import thêm module Virtual
+import { Mousewheel, Keyboard, Virtual } from 'swiper/modules'; 
+
 import 'swiper/css';
+// 2. Import CSS cho Virtual (Bắt buộc)
+import 'swiper/css/virtual'; 
+
 import VideoCard from './VideoCard';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-// Nhận thêm props Mute
 const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onToggleMuteGlobal }) => {
   const [videos, setVideos] = useState([]);
   const [swiperInstance, setSwiperInstance] = useState(null);
@@ -22,6 +25,7 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
     setLoading(true);
 
     try {
+      // Tải 5 video mỗi lần (giữ nguyên để tiết kiệm băng thông)
       const limit = 5; 
       const url = userId 
           ? `${API_BASE_URL}/api/feed?user_id=${userId}&page=${pageToLoad}&limit=${limit}`
@@ -50,6 +54,7 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
   }, [userId]);
 
   const handleSlideChange = (swiper) => {
+    // Logic tải thêm: Khi lướt đến gần cuối danh sách
     if (swiper.activeIndex >= videos.length - 2 && hasMore && !loading) {
       const nextPage = page + 1;
       setPage(nextPage);
@@ -72,25 +77,39 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
       )}
 
       <Swiper
+        // 3. Khai báo module Virtual
+        modules={[Mousewheel, Keyboard, Virtual]} 
+        
         direction={'vertical'}
         slidesPerView={1}
         mousewheel={true}
         keyboard={true}
-        modules={[Mousewheel, Keyboard]}
         className="mySwiper"
         onSwiper={setSwiperInstance}
         onSlideChange={handleSlideChange}
+        
+        // 4. CẤU HÌNH VIRTUAL (QUAN TRỌNG NHẤT)
+        virtual={{
+            enabled: true,
+            addSlidesBefore: 2, // Giữ 2 video phía trước
+            addSlidesAfter: 2,  // Giữ 2 video phía sau (để preload nhẹ)
+            // Tổng cộng trong DOM chỉ có khoảng 5 thẻ div -> iPhone chạy phà phà
+        }}
       >
+        {/* 5. RENDER LIST VỚI VIRTUAL
+           Lưu ý: Khi dùng virtual, Swiper yêu cầu map trực tiếp như bình thường, 
+           nhưng cần thêm prop virtualIndex
+        */}
         {videos.map((video, index) => (
-          <SwiperSlide key={`${video.id}-${index}`}>
+          <SwiperSlide key={`${video.id}-${index}`} virtualIndex={index}>
             {({ isActive }) => (
                 <VideoCard 
                   video={video} 
+                  // Khi dùng Virtual, isActive vẫn hoạt động chuẩn xác
                   isActive={isActive} 
                   onEnded={handleVideoEnded}
                   index={index}
                   
-                  // --- TRUYỀN TIẾP XUỐNG CARD ---
                   isCaptionOn={isCaptionOn} 
                   onToggleCaption={onToggleCaption}
                   isMutedGlobal={isMutedGlobal}
