@@ -22,8 +22,8 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
   // --- SINGLE PLAYER STATE ---
   const playerRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false); // Trạng thái play thực tế của Player
-  const [isVideoLoaded, setIsVideoLoaded] = useState(false); // Để ẩn hiện thumbnail
+  const [isPlaying, setIsPlaying] = useState(false); 
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false); // Biến quan trọng để hiển thị loading
   const [hasCountedView, setHasCountedView] = useState(false);
 
   // Load video list
@@ -48,36 +48,36 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
 
   // --- PLAYER CONTROLLER ---
   
-  // 1. Khi lướt sang video mới
   const handleSlideChange = (swiper) => {
     const newIndex = swiper.activeIndex;
     setActiveIndex(newIndex);
     
-    // Reset trạng thái view
+    // Reset ngay lập tức khi lướt sang video mới
     setHasCountedView(false);
-    setIsVideoLoaded(false); 
+    setIsVideoLoaded(false); // -> VideoCard sẽ hiện Spinner ngay lúc này
 
-    // Nếu có video, nạp vào Player ngay
     if (videos[newIndex] && playerRef.current) {
         playerRef.current.loadVideoById(videos[newIndex].id);
-        
-        // AUTO UNMUTE LOGIC (QUAN TRỌNG)
-        // Nếu user đã từng unmute (isMutedGlobal = false), video sau sẽ tự có tiếng
-        if (!isMutedGlobal) {
-             playerRef.current.unMute();
-        }
+        if (!isMutedGlobal) playerRef.current.unMute();
     }
 
-    // Load thêm video khi gần hết
     if (newIndex >= videos.length - 2 && hasMore && !loading) {
       fetchVideos();
     }
   };
 
-  // 2. Xử lý sự kiện Player
+  // [MỚI] Hàm xử lý tua video (+/- 5s)
+  const handleSeek = (seconds) => {
+      const player = playerRef.current;
+      if (player && typeof player.seekTo === 'function') {
+          // getCurrentTime() trả về giây
+          const currentTime = player.getCurrentTime();
+          player.seekTo(currentTime + seconds, true);
+      }
+  };
+
   const onPlayerReady = (event) => {
     playerRef.current = event.target;
-    // Bắt đầu video đầu tiên
     if (videos.length > 0) {
         event.target.loadVideoById(videos[0].id);
         if(isMutedGlobal) event.target.mute();
@@ -85,53 +85,48 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
   };
 
   const onPlayerStateChange = (event) => {
-    // 1: Playing, 2: Paused, 3: Buffering
-    if (event.data === 1) {
+    if (event.data === 1) { // Playing
         setIsPlaying(true);
-        setIsVideoLoaded(true); // Ẩn thumbnail đi
-    } else if (event.data === 2) {
+        setIsVideoLoaded(true); // -> VideoCard sẽ ẩn Spinner, hiện nút Pause (nếu cần)
+    } else if (event.data === 2) { // Paused
         setIsPlaying(false);
-    } else if (event.data === 0) {
-       // Ended -> Next slide
+    } else if (event.data === 0) { // Ended
        const swiper = document.querySelector('.mySwiper').swiper;
        if(swiper) swiper.slideNext();
     }
   };
 
-  // 3. Logic đếm view (Thay thế logic cũ trong VideoCard)
   useEffect(() => {
     let interval;
     if (isPlaying && !hasCountedView && videos[activeIndex]) {
         interval = setInterval(() => {
-            if (playerRef.current && playerRef.current.getCurrentTime() >= 15) {
-                axios.post(`${API_BASE_URL}/api/view/${videos[activeIndex].id}`).catch(()=>{});
-                setHasCountedView(true);
-                clearInterval(interval);
+            if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+                if (playerRef.current.getCurrentTime() >= 15) {
+                    axios.post(`${API_BASE_URL}/api/view/${videos[activeIndex].id}`).catch(()=>{});
+                    setHasCountedView(true);
+                    clearInterval(interval);
+                }
             }
         }, 1000);
     }
     return () => clearInterval(interval);
   }, [isPlaying, hasCountedView, activeIndex, videos]);
 
-  // 4. Toggle Play/Mute khi bấm vào màn hình
   const handleScreenClick = () => {
     const player = playerRef.current;
     if (!player) return;
 
     if (isMutedGlobal) {
-        // Cú click đầu tiên: Unmute toàn bộ
         onToggleMuteGlobal(false);
         player.unMute();
         player.setVolume(100);
-        player.playVideo(); // Đảm bảo chạy
+        player.playVideo(); 
     } else {
-        // Các lần sau: Toggle Pause/Play
         if (isPlaying) player.pauseVideo();
         else player.playVideo();
     }
   };
 
-  // Cấu hình Player
   const playerOpts = {
     height: '100%', width: '100%',
     playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, modestbranding: 1 }
@@ -139,17 +134,15 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
 
   return (
     <div className="video-feed">
-       {/* === LAYER 1: SINGLE PLAYER BACKGROUND === */}
        <div id="youtube-background-layer">
           <YouTube 
             opts={playerOpts}
             onReady={onPlayerReady}
             onStateChange={onPlayerStateChange}
-            className="video-iframe" // CSS: width 100%, height 100%
+            className="video-iframe" 
           />
        </div>
 
-       {/* === LAYER 2: SWIPER (UI & THUMBNAILS) === */}
        <Swiper
         modules={[Mousewheel, Keyboard, Virtual]}
         direction={'vertical'}
@@ -165,10 +158,11 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
                 isActive={index === activeIndex}
                 isGlobalPlaying={isPlaying}
                 isMutedGlobal={isMutedGlobal}
-                isVideoLoaded={isVideoLoaded && index === activeIndex} // Chỉ ẩn thumbnail của slide đang chạy
+                isVideoLoaded={isVideoLoaded && index === activeIndex} 
                 onTogglePlay={handleScreenClick}
                 isCaptionOn={isCaptionOn}
                 onToggleCaption={onToggleCaption}
+                onSeek={handleSeek} // [MỚI] Truyền hàm seek xuống
             />
           </SwiperSlide>
         ))}
