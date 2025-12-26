@@ -151,6 +151,7 @@ def login_google(request: LoginRequest):
     except ValueError:
         raise HTTPException(status_code=401, detail="Token không hợp lệ")
 
+@app.head("/")
 @app.get("/")
 def read_root():
     return {"message": "Welcome to YT-TikTok API"}
