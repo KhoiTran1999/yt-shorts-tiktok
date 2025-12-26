@@ -1,13 +1,13 @@
-// frontend/src/components/VideoCard.jsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import YouTube from 'react-youtube';
 import { FaPlay, FaVolumeMute, FaClosedCaptioning, FaRedo, FaUndo } from 'react-icons/fa';
 
 const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCaption, isMutedGlobal, onToggleMuteGlobal }) => {
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false); // Mặc định là false
   const [isReady, setIsReady] = useState(false);
   const playerRef = useRef(null);
 
+  // --- Hàm an toàn gọi API ---
   const safePlayerCall = (action) => {
     const player = playerRef.current;
     if (!player) return;
@@ -39,7 +39,8 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: 1,
+      // SỬA 1: Tắt autoplay của YouTube để tránh việc nó tự chạy ngầm gây chồng âm thanh
+      autoplay: 0, 
       controls: 0,
       rel: 0,
       showinfo: 0,
@@ -56,9 +57,10 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
     playerRef.current = event.target;
     setIsReady(true);
     
-    // 1. LUÔN MUTE LÚC ĐẦU (Để qua mặt iOS)
+    // Luôn mute lúc load xong để chuẩn bị cho autoplay
     event.target.mute(); 
 
+    // Nếu slide này đang hiện thì mới play
     if (isActive) {
       event.target.playVideo();
     }
@@ -67,41 +69,44 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
   const onStateChange = (event) => {
     if (event.data === 0 && isActive && onEnded) onEnded();
     
-    // 2. KHI VIDEO BẮT ĐẦU CHẠY (PLAYING = 1)
-    if (event.data === 1) {
+    // SỬA 2: CHỈ BẬT TIẾNG KHI VIDEO ĐÃ THỰC SỰ CHẠY
+    // (Tránh bị iOS chặn ngay từ cửa)
+    if (event.data === 1) { // 1 = Playing
       setIsPlaying(true);
       
-      // LOGIC THÔNG MINH:
-      // Nếu trạng thái toàn cục là "Đã bật tiếng" -> Tự động Unmute video này
+      // Nếu Global đang bật tiếng -> Thì mới thử Unmute video này
       if (!isMutedGlobal) {
-        safePlayerCall('unmute');
+        // Delay nhẹ 200ms để iOS không tưởng nhầm là spam
+        setTimeout(() => {
+             safePlayerCall('unmute');
+        }, 200);
       }
     }
     
-    if (event.data === 2) setIsPlaying(false);
+    if (event.data === 2) setIsPlaying(false); // 2 = Paused
   };
 
+  // SỬA 3: QUẢN LÝ PLAY/PAUSE NGHIÊM NGẶT THEO isActive
   useEffect(() => {
     if (!playerRef.current) return;
+
     if (isActive) {
-      // Khi lướt tới video mới:
-      // Bước 1: Mute để đảm bảo Autoplay chạy được
-      safePlayerCall('mute'); 
+      // Khi lướt tới:
+      // 1. Mute trước (để qua mặt iOS)
+      safePlayerCall('mute');
+      // 2. Play ngay
       safePlayerCall('play');
       setIsPlaying(true);
-      
-      // Bước 2: Nếu Global đang mở tiếng -> Thử Unmute sau 0.5s
-      // (Delay nhỏ giúp iOS xử lý ổn định hơn)
-      if (!isMutedGlobal) {
-        setTimeout(() => {
-            safePlayerCall('unmute');
-        }, 500);
-      }
     } else {
+      // Khi lướt đi:
+      // 1. Pause ngay lập tức
       safePlayerCall('pause');
+      // 2. Mute luôn cho chắc ăn (tránh rò rỉ âm thanh)
+      safePlayerCall('mute');
       setIsPlaying(false);
     }
-  }, [isActive, isMutedGlobal]); // Thêm dependency isMutedGlobal
+  }, [isActive]); 
+  // Lưu ý: Đã bỏ dependency isMutedGlobal ở đây để tránh việc toggle mute làm video bị reload/pause nhầm
 
   const togglePlay = () => {
     if (!playerRef.current) return;
@@ -110,7 +115,7 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
     if (isMutedGlobal) {
       // Nếu đang tắt tiếng -> Bấm để Bật tiếng
       safePlayerCall('unmute');
-      onToggleMuteGlobal(false); // Cập nhật toàn cục: "Tôi muốn nghe tiếng"
+      if (onToggleMuteGlobal) onToggleMuteGlobal(false); 
     } else {
       // Nếu đã có tiếng -> Bấm để Pause/Play
       if (isPlaying) {
@@ -161,16 +166,16 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
           position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
           display: 'flex', flexDirection: 'column', gap: '20px', zIndex: 60 
         }}>
-          <button onClick={(e) => handleSeek(e, -5)} style={/* giữ nguyên style cũ */ {background:'rgba(0,0,0,0.4)', color:'white', width:'45px', height:'45px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.2)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
-            <FaUndo size={14}/> -5s
+          <button onClick={(e) => handleSeek(e, -5)} style={{background:'rgba(0,0,0,0.4)', color:'white', width:'45px', height:'45px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.2)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', fontSize: '10px'}}>
+            <FaUndo size={14} style={{marginBottom:'2px'}}/> -5s
           </button>
-          <button onClick={(e) => handleSeek(e, 5)} style={/* giữ nguyên style cũ */ {background:'rgba(0,0,0,0.4)', color:'white', width:'45px', height:'45px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.2)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
-            <FaRedo size={14}/> +5s
+          <button onClick={(e) => handleSeek(e, 5)} style={{background:'rgba(0,0,0,0.4)', color:'white', width:'45px', height:'45px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.2)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', fontSize: '10px'}}>
+            <FaRedo size={14} style={{marginBottom:'2px'}}/> +5s
           </button>
         </div>
       )}
 
-      {/* ICON LOA TẮT (Chỉ hiện khi Mute toàn cục) */}
+      {/* ICON LOA TẮT */}
       {isMutedGlobal && isActive && (
         <div className="play-icon-overlay">
           <FaVolumeMute size={40} color="white" style={{ opacity: 0.8 }} />
@@ -178,6 +183,7 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
         </div>
       )}
 
+      {/* ICON PLAY (Khi Pause) */}
       {isReady && !isPlaying && isActive && !isMutedGlobal && (
         <div className="play-icon-overlay">
           <FaPlay size={50} color="white" style={{ opacity: 0.8 }} />
