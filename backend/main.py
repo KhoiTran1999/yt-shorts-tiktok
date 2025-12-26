@@ -16,7 +16,10 @@ app = FastAPI()
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
-origins = ["http://localhost:3000", "http://localhost:5173"]
+origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,https://yt-shorts-tiktok.vercel.app")
+origins = origins_str.split(",")
+
+print(f"🚀 Allowed Origins: {origins}")
 
 app.add_middleware(
     CORSMiddleware,
