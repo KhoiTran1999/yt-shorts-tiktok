@@ -1,19 +1,16 @@
+// frontend/src/components/VideoCard.jsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import YouTube from 'react-youtube';
-import { FaPlay, FaVolumeMute, FaClosedCaptioning, FaRedo, FaUndo } from 'react-icons/fa'; // <--- 1. Import icon tua
+import { FaPlay, FaVolumeMute, FaClosedCaptioning, FaRedo, FaUndo } from 'react-icons/fa';
 
-const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCaption }) => {
+const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCaption, isMutedGlobal, onToggleMuteGlobal }) => {
   const [isPlaying, setIsPlaying] = useState(true);
-  const [isMuted, setIsMuted] = useState(index === 0);
   const [isReady, setIsReady] = useState(false);
-
   const playerRef = useRef(null);
 
-  // --- Hàm gọi API an toàn (Giữ nguyên) ---
   const safePlayerCall = (action) => {
     const player = playerRef.current;
     if (!player) return;
-
     try {
       const iframe = player.getIframe();
       if (iframe && iframe.isConnected) {
@@ -22,41 +19,34 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
         if (action === 'mute') player.mute();
         if (action === 'unmute') player.unMute();
       }
-    } catch (error) {
-      console.warn("YouTube Player Error (Ignored):", error);
-    }
+    } catch (error) { console.warn("Player Error:", error); }
   };
 
-  // --- 2. HÀM XỬ LÝ TUA VIDEO (SEEK) ---
   const handleSeek = (e, seconds) => {
-    e.stopPropagation(); // Chặn sự kiện nổi bọt (để không bị Play/Pause nhầm)
-    
+    e.stopPropagation(); 
     const player = playerRef.current;
     if (!player) return;
-
     try {
       const iframe = player.getIframe();
       if (iframe && iframe.isConnected) {
-        // Lấy thời gian hiện tại và cộng/trừ thêm giây
         const currentTime = player.getCurrentTime();
         player.seekTo(currentTime + seconds, true);
       }
-    } catch (error) {
-      console.warn("Seek error:", error);
-    }
+    } catch (error) { console.warn("Seek error:", error); }
   };
 
   const opts = useMemo(() => ({
     height: '100%',
     width: '100%',
     playerVars: {
-      autoplay: 0,
+      autoplay: 1,
       controls: 0,
       rel: 0,
       showinfo: 0,
       modestbranding: 1,
       disablekb: 1,
       fs: 0,
+      playsinline: 1, // Bắt buộc cho iOS
       cc_load_policy: isCaptionOn ? 1 : 0, 
       origin: window.location.origin,
     },
@@ -65,43 +55,64 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
   const onReady = (event) => {
     playerRef.current = event.target;
     setIsReady(true);
-
-    if (index === 0) {
-      safePlayerCall('mute');
-      setIsMuted(true);
-    } else {
-      safePlayerCall('unmute');
-      setIsMuted(false);
-    }
+    
+    // 1. LUÔN MUTE LÚC ĐẦU (Để qua mặt iOS)
+    event.target.mute(); 
 
     if (isActive) {
-      safePlayerCall('play');
+      event.target.playVideo();
     }
   };
 
   const onStateChange = (event) => {
     if (event.data === 0 && isActive && onEnded) onEnded();
-    if (event.data === 1) setIsPlaying(true);
+    
+    // 2. KHI VIDEO BẮT ĐẦU CHẠY (PLAYING = 1)
+    if (event.data === 1) {
+      setIsPlaying(true);
+      
+      // LOGIC THÔNG MINH:
+      // Nếu trạng thái toàn cục là "Đã bật tiếng" -> Tự động Unmute video này
+      if (!isMutedGlobal) {
+        safePlayerCall('unmute');
+      }
+    }
+    
     if (event.data === 2) setIsPlaying(false);
   };
 
   useEffect(() => {
     if (!playerRef.current) return;
     if (isActive) {
+      // Khi lướt tới video mới:
+      // Bước 1: Mute để đảm bảo Autoplay chạy được
+      safePlayerCall('mute'); 
       safePlayerCall('play');
       setIsPlaying(true);
+      
+      // Bước 2: Nếu Global đang mở tiếng -> Thử Unmute sau 0.5s
+      // (Delay nhỏ giúp iOS xử lý ổn định hơn)
+      if (!isMutedGlobal) {
+        setTimeout(() => {
+            safePlayerCall('unmute');
+        }, 500);
+      }
     } else {
       safePlayerCall('pause');
       setIsPlaying(false);
     }
-  }, [isActive]);
+  }, [isActive, isMutedGlobal]); // Thêm dependency isMutedGlobal
 
   const togglePlay = () => {
     if (!playerRef.current) return;
-    if (isMuted) {
+    
+    // Logic User Click:
+    if (isMutedGlobal) {
+      // Nếu đang tắt tiếng -> Bấm để Bật tiếng
       safePlayerCall('unmute');
-      setIsMuted(false);
+      onToggleMuteGlobal(false); // Cập nhật toàn cục: "Tôi muốn nghe tiếng"
     } else {
+      // Nếu đã có tiếng -> Bấm để Pause/Play
       if (isPlaying) {
         safePlayerCall('pause');
       } else {
@@ -127,7 +138,6 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
         loading="lazy"
       />
 
-      {/* Button CC (Góc trái trên) */}
       {isReady && (
         <button 
           onClick={handleToggleCaptions}
@@ -145,73 +155,30 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
         </button>
       )}
 
-      {/* --- 3. CỤM NÚT TUA (BÊN PHẢI) --- */}
+      {/* Nút Tua */}
       {isReady && (
         <div style={{
-          position: 'absolute', 
-          right: '10px', 
-          top: '50%', 
-          transform: 'translateY(-50%)', // Căn giữa theo chiều dọc
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: '20px', 
-          zIndex: 60 
+          position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
+          display: 'flex', flexDirection: 'column', gap: '20px', zIndex: 60 
         }}>
-          {/* Nút Tua Lùi 5s */}
-          <button 
-            onClick={(e) => handleSeek(e, -5)}
-            style={{
-              background: 'rgba(0,0,0,0.4)', 
-              color: 'white', 
-              border: '1px solid rgba(255,255,255,0.2)', 
-              borderRadius: '50%', 
-              width: '45px', 
-              height: '45px',
-              display: 'flex', 
-              flexDirection: 'column',
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              cursor: 'pointer',
-              fontSize: '10px'
-            }}
-          >
-            <FaUndo size={14} style={{marginBottom: '2px'}}/>
-            -5s
+          <button onClick={(e) => handleSeek(e, -5)} style={/* giữ nguyên style cũ */ {background:'rgba(0,0,0,0.4)', color:'white', width:'45px', height:'45px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.2)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
+            <FaUndo size={14}/> -5s
           </button>
-
-          {/* Nút Tua Tới 5s */}
-          <button 
-            onClick={(e) => handleSeek(e, 5)}
-            style={{
-              background: 'rgba(0,0,0,0.4)', 
-              color: 'white', 
-              border: '1px solid rgba(255,255,255,0.2)', 
-              borderRadius: '50%', 
-              width: '45px', 
-              height: '45px',
-              display: 'flex', 
-              flexDirection: 'column',
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              cursor: 'pointer',
-              fontSize: '10px'
-            }}
-          >
-            <FaRedo size={14} style={{marginBottom: '2px'}}/>
-            +5s
+          <button onClick={(e) => handleSeek(e, 5)} style={/* giữ nguyên style cũ */ {background:'rgba(0,0,0,0.4)', color:'white', width:'45px', height:'45px', borderRadius:'50%', border:'1px solid rgba(255,255,255,0.2)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center'}}>
+            <FaRedo size={14}/> +5s
           </button>
         </div>
       )}
 
-      {/* Icon Mute */}
-      {isMuted && isActive && isPlaying && (
+      {/* ICON LOA TẮT (Chỉ hiện khi Mute toàn cục) */}
+      {isMutedGlobal && isActive && (
         <div className="play-icon-overlay">
           <FaVolumeMute size={40} color="white" style={{ opacity: 0.8 }} />
+          <p style={{color:'white', marginTop: 10, fontSize: 12}}>Tap to unmute</p>
         </div>
       )}
 
-      {/* Icon Play */}
-      {isReady && !isPlaying && isActive && !isMuted && (
+      {isReady && !isPlaying && isActive && !isMutedGlobal && (
         <div className="play-icon-overlay">
           <FaPlay size={50} color="white" style={{ opacity: 0.8 }} />
         </div>

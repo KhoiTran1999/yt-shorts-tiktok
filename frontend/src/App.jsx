@@ -18,8 +18,9 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSubsModal, setShowSubsModal] = useState(false);
 
-  // --- MỚI: QUẢN LÝ TRẠNG THÁI CAPTION TOÀN CỤC ---
-  const [isCaptionOn, setIsCaptionOn] = useState(false); // Mặc định tắt
+  // --- TRẠNG THÁI TOÀN CỤC ---
+  const [isCaptionOn, setIsCaptionOn] = useState(false);
+  const [isMutedGlobal, setIsMutedGlobal] = useState(true); // <--- MỚI: Mặc định tắt tiếng
 
   const handleLoginSuccess = (userData) => {
     setUser(userData);
@@ -30,14 +31,6 @@ function App() {
     setUser(null);
     localStorage.removeItem('user');
     googleLogout(); 
-  };
-
-  const handleChannelAdded = () => {
-    setRefreshKey(prev => prev + 1);
-  };
-
-  const handleListChanged = () => {
-    setRefreshKey(prev => prev + 1);
   };
 
   return (
@@ -52,29 +45,31 @@ function App() {
             onOpenAddChannel={() => setShowAddModal(true)}
             onOpenSubs={() => setShowSubsModal(true)}
           />
-
           <AddChannelModal 
             userId={user.id} 
-            onChannelAdded={handleChannelAdded}
+            onChannelAdded={() => setRefreshKey(prev => prev + 1)}
             isOpen={showAddModal}
             onClose={() => setShowAddModal(false)}
           />
-
           <SubsModal 
             userId={user.id} 
-            onListChanged={handleListChanged}
+            onListChanged={() => setRefreshKey(prev => prev + 1)}
             isOpen={showSubsModal}
             onClose={() => setShowSubsModal(false)}
           />
         </>
       )}
 
-      {/* Truyền trạng thái Caption xuống VideoFeed */}
       <VideoFeed 
         key={`${user ? user.id : 'guest'}-${refreshKey}`} 
         userId={user?.id} 
-        isCaptionOn={isCaptionOn} // <--- TRUYỀN XUỐNG
-        onToggleCaption={() => setIsCaptionOn(prev => !prev)} // <--- HÀM ĐỔI TRẠNG THÁI
+        
+        // --- TRUYỀN XUỐNG FEED ---
+        isCaptionOn={isCaptionOn}
+        onToggleCaption={() => setIsCaptionOn(prev => !prev)}
+        
+        isMutedGlobal={isMutedGlobal} // <--- TRUYỀN STATE
+        onToggleMuteGlobal={(val) => setIsMutedGlobal(val)} // <--- TRUYỀN HÀM SET
       />
     </div>
   );

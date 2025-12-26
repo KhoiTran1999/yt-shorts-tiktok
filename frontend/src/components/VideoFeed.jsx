@@ -1,13 +1,15 @@
+// frontend/src/components/VideoFeed.jsx
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import { Mousewheel, Keyboard } from 'swiper/modules';
 import 'swiper/css';
 import VideoCard from './VideoCard';
-const API_URL = import.meta.env.VITE_API_BASE_URL;
 
-// SỬA 1: Thêm isCaptionOn, onToggleCaption vào danh sách nhận props
-const VideoFeed = ({ userId, isCaptionOn, onToggleCaption }) => {
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
+// Nhận thêm props Mute
+const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onToggleMuteGlobal }) => {
   const [videos, setVideos] = useState([]);
   const [swiperInstance, setSwiperInstance] = useState(null);
   
@@ -22,8 +24,8 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption }) => {
     try {
       const limit = 5; 
       const url = userId 
-          ? `${API_URL}/api/feed?user_id=${userId}&page=${pageToLoad}&limit=${limit}`
-          : `${API_URL}/api/feed?page=${pageToLoad}&limit=${limit}`;
+          ? `${API_BASE_URL}/api/feed?user_id=${userId}&page=${pageToLoad}&limit=${limit}`
+          : `${API_BASE_URL}/api/feed?page=${pageToLoad}&limit=${limit}`;
           
       const response = await axios.get(url);
       const newVideos = response.data;
@@ -87,9 +89,12 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption }) => {
                   isActive={isActive} 
                   onEnded={handleVideoEnded}
                   index={index}
-                  // SỬA 2: Truyền tiếp 2 prop này xuống VideoCard
+                  
+                  // --- TRUYỀN TIẾP XUỐNG CARD ---
                   isCaptionOn={isCaptionOn} 
                   onToggleCaption={onToggleCaption}
+                  isMutedGlobal={isMutedGlobal}
+                  onToggleMuteGlobal={onToggleMuteGlobal}
                 />
             )}
           </SwiperSlide>
