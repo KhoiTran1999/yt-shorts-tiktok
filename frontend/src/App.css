@@ -24,24 +24,35 @@ html, body, #root {
 
 .video-feed {
   width: 100%;
-  max-width: 480px; /* Kích thước chuẩn mobile */
+  max-width: 480px;
   height: 100%;
-  background-color: var(--tiktok-gray);
+  background-color: #000; /* Nền đen để che khi load */
   position: relative;
+  overflow: hidden;
+}
+
+/* --- SINGLE PLAYER LAYER --- */
+/* Lớp chứa Player nằm cố định bên dưới */
+#youtube-background-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0; /* Thấp nhất */
+  pointer-events: none; /* Để click xuyên qua xuống Swiper nếu cần, nhưng ta sẽ xử lý click ở layer trên */
 }
 
 /* QUAN TRỌNG: Class của Swiper phải full chiều cao */
 .mySwiper {
   width: 100%;
   height: 100%;
+  z-index: 10; /* Nằm đè lên Player */
 }
 
+/* Slide trong suốt để nhìn thấy Video bên dưới */
 .swiper-slide {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #000;
-  position: relative;
+  background: transparent !important; 
 }
 
 /* Video Card */
@@ -53,12 +64,29 @@ html, body, #root {
   pointer-events: none; 
 }
 
-/* Biến con trỏ chuột thành hình bàn tay để user biết là bấm được */
+/* --- VIDEO CARD UI --- */
 .video-card {
   width: 100%;
   height: 100%;
   position: relative;
-  cursor: pointer; 
+  /* Quan trọng: Background trong suốt */
+  background: transparent; 
+}
+
+/* Thumbnail che video khi đang load */
+.video-thumbnail-overlay {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  object-fit: cover;
+  z-index: 1; /* Nằm dưới UI info nhưng trên Player */
+  transition: opacity 0.3s ease;
+}
+
+/* Các thành phần UI (Info, nút bấm) */
+.video-ui-layer {
+  position: absolute;
+  top:0; left:0; width:100%; height:100%;
+  z-index: 20; /* Nằm trên cùng */
 }
 
 /* Icon Play hiện giữa màn hình khi pause */
