@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Header
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Header, Query
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from fastapi.middleware.cors import CORSMiddleware
@@ -107,6 +107,14 @@ def get_feed(user_id: Optional[str] = None, page: int = 1, limit: int = 10):
         clean_videos = temp_list[:limit]
     
     return clean_videos
+
+@app.post("/api/view/{video_id}")
+def count_view(video_id: str):
+    """
+    Frontend gọi API này khi người dùng xem >= 15s hoặc hết video.
+    """
+    db.increase_video_score(video_id)
+    return {"status": "ok", "message": "View counted"}
 
 # --- CÁC API KHÁC (GIỮ NGUYÊN) ---
 

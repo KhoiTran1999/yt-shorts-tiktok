@@ -1,13 +1,33 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import YouTube from 'react-youtube';
+import axios from 'axios'; // [MỚI] Import axios để gọi API
 import { FaPlay, FaVolumeMute, FaClosedCaptioning, FaRedo, FaUndo } from 'react-icons/fa';
 
+// [MỚI] Lấy URL Backend
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCaption, isMutedGlobal, onToggleMuteGlobal }) => {
-  const [isPlaying, setIsPlaying] = useState(false); // Mặc định là false
+  const [isPlaying, setIsPlaying] = useState(false); 
   const [isReady, setIsReady] = useState(false);
   const playerRef = useRef(null);
 
-  // --- Hàm an toàn gọi API ---
+  // [MỚI] State để khóa: Đã tính view chưa?
+  const [hasCountedView, setHasCountedView] = useState(false);
+
+  // --- [MỚI] HÀM GỌI API CỘNG ĐIỂM ---
+  const recordView = () => {
+    if (!hasCountedView) {
+      console.log(`👁️ Đã xem ${video.title} (>=15s hoặc hết) -> +1 Point`);
+      
+      // Gọi API báo cho backend
+      axios.post(`${API_BASE_URL}/api/view/${video.id}`)
+        .catch(err => console.error("Lỗi cộng điểm:", err));
+      
+      setHasCountedView(true); // Khóa lại ngay lập tức để không cộng trùng
+    }
+  };
+
+  // --- Hàm an toàn gọi API Player ---
   const safePlayerCall = (action) => {
     const player = playerRef.current;
     if (!player) return;
@@ -39,7 +59,6 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
     height: '100%',
     width: '100%',
     playerVars: {
-      // SỬA 1: Tắt autoplay của YouTube để tránh việc nó tự chạy ngầm gây chồng âm thanh
       autoplay: 0, 
       controls: 0,
       rel: 0,
@@ -47,7 +66,7 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
       modestbranding: 1,
       disablekb: 1,
       fs: 0,
-      playsinline: 1, // Bắt buộc cho iOS
+      playsinline: 1,
       cc_load_policy: isCaptionOn ? 1 : 0, 
       origin: window.location.origin,
     },
@@ -56,68 +75,85 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
   const onReady = (event) => {
     playerRef.current = event.target;
     setIsReady(true);
-    
-    // Luôn mute lúc load xong để chuẩn bị cho autoplay
     event.target.mute(); 
 
-    // Nếu slide này đang hiện thì mới play
     if (isActive) {
       event.target.playVideo();
     }
   };
 
   const onStateChange = (event) => {
-    if (event.data === 0 && isActive && onEnded) onEnded();
+    // [SỬA] Xử lý khi video kết thúc (state = 0)
+    if (event.data === 0 && isActive) {
+      recordView(); // Nếu video ngắn < 15s mà xem hết thì vẫn tính 1 view
+      if (onEnded) onEnded();
+    }
     
-    // SỬA 2: CHỈ BẬT TIẾNG KHI VIDEO ĐÃ THỰC SỰ CHẠY
-    // (Tránh bị iOS chặn ngay từ cửa)
-    if (event.data === 1) { // 1 = Playing
+    // Xử lý Playing (state = 1)
+    if (event.data === 1) { 
       setIsPlaying(true);
-      
-      // Nếu Global đang bật tiếng -> Thì mới thử Unmute video này
       if (!isMutedGlobal) {
-        // Delay nhẹ 200ms để iOS không tưởng nhầm là spam
         setTimeout(() => {
              safePlayerCall('unmute');
         }, 200);
       }
     }
     
-    if (event.data === 2) setIsPlaying(false); // 2 = Paused
+    // Xử lý Paused (state = 2)
+    if (event.data === 2) setIsPlaying(false);
   };
 
-  // SỬA 3: QUẢN LÝ PLAY/PAUSE NGHIÊM NGẶT THEO isActive
+  // --- [MỚI] LOGIC CHECK 15 GIÂY ---
+  useEffect(() => {
+    let interval = null;
+
+    // Chỉ chạy timer khi: Đang active, Đang play, và CHƯA tính view
+    if (isActive && isPlaying && !hasCountedView) {
+      interval = setInterval(() => {
+        const player = playerRef.current;
+        if (player && typeof player.getCurrentTime === 'function') {
+          try {
+            const currentTime = player.getCurrentTime();
+            // NẾU XEM QUÁ 15 GIÂY
+            if (currentTime >= 15) {
+              recordView();
+              clearInterval(interval); // Xong nhiệm vụ thì dừng
+            }
+          } catch (e) { /* Bỏ qua lỗi nhỏ khi player chưa sẵn sàng */ }
+        }
+      }, 1000); // Check mỗi 1 giây
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isActive, isPlaying, hasCountedView]); 
+
+
+  // QUẢN LÝ PLAY/PAUSE THEO isActive
   useEffect(() => {
     if (!playerRef.current) return;
 
     if (isActive) {
-      // Khi lướt tới:
-      // 1. Mute trước (để qua mặt iOS)
       safePlayerCall('mute');
-      // 2. Play ngay
       safePlayerCall('play');
       setIsPlaying(true);
     } else {
-      // Khi lướt đi:
-      // 1. Pause ngay lập tức
       safePlayerCall('pause');
-      // 2. Mute luôn cho chắc ăn (tránh rò rỉ âm thanh)
       safePlayerCall('mute');
       setIsPlaying(false);
+      // Có thể reset hasCountedView ở đây nếu muốn mỗi lần lướt lại tính view mới
+      // setHasCountedView(false); 
     }
   }, [isActive]); 
-  // Lưu ý: Đã bỏ dependency isMutedGlobal ở đây để tránh việc toggle mute làm video bị reload/pause nhầm
 
   const togglePlay = () => {
     if (!playerRef.current) return;
     
-    // Logic User Click:
     if (isMutedGlobal) {
-      // Nếu đang tắt tiếng -> Bấm để Bật tiếng
       safePlayerCall('unmute');
       if (onToggleMuteGlobal) onToggleMuteGlobal(false); 
     } else {
-      // Nếu đã có tiếng -> Bấm để Pause/Play
       if (isPlaying) {
         safePlayerCall('pause');
       } else {
@@ -198,11 +234,11 @@ const VideoCard = ({ video, isActive, onEnded, index, isCaptionOn, onToggleCapti
             style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px solid white', objectFit: 'cover' }} 
           />
           <h4 style={{ margin: 0, fontSize: '16px', color: '#fff', textShadow: '1px 1px 2px black', fontWeight: 'bold' }}>
-             {video.channel_name || "Channel"}
+              {video.channel_name || "Channel"}
           </h4>
         </div>
         <p className="video-title" style={{ margin: 0, fontSize: '14px', fontWeight: 'normal', textShadow: '1px 1px 2px black', lineHeight: '1.4' }}>
-           {video.title}
+            {video.title}
         </p>
       </div>
     </div>

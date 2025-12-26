@@ -1,3 +1,4 @@
+from random import random
 import redis
 import json
 import time
@@ -26,36 +27,101 @@ def is_channel_exist(channel_id):
 
 # === CÁC HÀM XỬ LÝ VIDEO ===
 def add_video_to_db(channel_id, video_id, title, thumbnail):
-    """
-    1. Lưu thông tin chi tiết video.
-    2. Lưu vào danh sách riêng của kênh.
-    3. Lưu vào danh sách GLOBAL (cho Guest xem).
-    """
-    timestamp = int(time.time()) 
+    timestamp = int(time.time())
     
-    # 1. Lưu metadata video
+    # 1. Lưu metadata
     video_key = f"video:{video_id}"
     video_data = {
-        "id": video_id,
-        "channel_id": channel_id,
-        "title": title,
-        "thumbnail": thumbnail,
-        "published_at": timestamp
+        "id": video_id, "channel_id": channel_id, "title": title,
+        "thumbnail": thumbnail, "published_at": timestamp
     }
     r.hset(video_key, mapping=video_data)
     
-    # 2. Thêm vào danh sách video của kênh (Sorted Set)
+    # 2. Lưu vào list kênh & list global
     r.zadd(f"channel:{channel_id}:videos", {video_id: timestamp})
-    
-    # 3. [MỚI] Thêm vào danh sách GLOBAL (cho Guest xem)
     r.zadd("videos:all", {video_id: timestamp})
+    
+    # 3. [QUAN TRỌNG] Khởi tạo điểm = 0 cho video mới
+    r.zadd("videos:score", {video_id: 0}, nx=True)
+
+# === HÀM CỘNG ĐIỂM (TÍNH VIEW) ===
+def increase_video_score(video_id):
+    # Cộng 1 điểm. Zincrby trả về điểm mới
+    new_score = r.zincrby("videos:score", 1, video_id)
+    print(f"📈 Video {video_id} +1 view -> Score: {new_score}")
+    return new_score
+
+# === LOGIC FEED THÔNG MINH (CHO CẢ GLOBAL & SUB) ===
+def init_feed_session(session_id, user_id=None):
+    POOL_SIZE = 500
+    video_ids = []
+
+    # --- TRƯỜNG HỢP 1: USER ĐÃ LOGIN & CÓ SUB (OPTION 2 PHỨC TẠP) ---
+    if user_id:
+        subs = list(r.smembers(f"user:{user_id}:subs"))
+        if subs:
+            # B1: Tạo key tạm chứa TẤT CẢ video của các kênh đã sub
+            # (Key này dùng timestamp làm score)
+            temp_all_subs = f"temp:calc:{session_id}:step1"
+            keys_to_union = [f"channel:{cid}:videos" for cid in subs]
+            
+            if keys_to_union:
+                r.zunionstore(temp_all_subs, keys_to_union)
+                r.expire(temp_all_subs, 60) # Tự hủy sau 60s
+                
+                # B2: [MAGIC STEP] Giao (Intersect) với bảng điểm Global
+                # Mục đích: Lọc ra các video Sub NHƯNG sắp xếp theo Score (Điểm thấp lên đầu)
+                # weights=[0, 1]: Nghĩa là bỏ qua score timestamp (x0), lấy score view (x1)
+                temp_scored_subs = f"temp:calc:{session_id}:step2"
+                r.zinterstore(
+                    temp_scored_subs, 
+                    keys=[temp_all_subs, "videos:score"], 
+                    weights=[0, 1] 
+                )
+                r.expire(temp_scored_subs, 60)
+
+                # B3: Lấy 500 video điểm thấp nhất từ tập hợp đã giao
+                video_ids = r.zrange(temp_scored_subs, 0, POOL_SIZE - 1)
+
+    # --- TRƯỜNG HỢP 2: KHÁCH LẠ HOẶC KHÔNG SUB AI (GLOBAL FEED) ---
+    if not video_ids:
+        # Lấy 500 video điểm thấp nhất toàn hệ thống
+        video_ids = r.zrange("videos:score", 0, POOL_SIZE - 1)
+        
+        # Fallback: Nếu hệ thống mới tinh chưa có score, lấy theo thời gian
+        if not video_ids:
+            video_ids = r.zrevrange("videos:all", 0, POOL_SIZE - 1)
+
+    if not video_ids:
+        return False
+
+    # --- BƯỚC CUỐI: SHUFFLE (BẮT BUỘC) ---
+    random.shuffle(video_ids)
+
+    # Lưu vào Session
+    session_key = f"session:{session_id}"
+    r.delete(session_key)
+    r.rpush(session_key, *video_ids)
+    r.expire(session_key, 7200)
+    
+    print(f"🎲 Session {session_id} initialized with {len(video_ids)} videos (Fairness Mode)")
+    return True
+
+# ... (GIỮ NGUYÊN CÁC HÀM GET SESSION, GET VIDEO, USER...) ...
+def get_videos_from_session(session_id, limit=5):
+    session_key = f"session:{session_id}"
+    video_ids = r.lpop(session_key, limit)
+    if not video_ids: return []
+    return get_videos_from_ids(video_ids)
 
 def get_videos_from_ids(video_ids):
-    """Hàm bổ trợ: Lấy chi tiết video từ danh sách ID"""
     results = []
     for vid in video_ids:
         info = r.hgetall(f"video:{vid}")
         if info:
+            channel_info = r.hgetall(f"channel:{info['channel_id']}:info")
+            info['channel_name'] = channel_info.get("name", "Unknown")
+            info['channel_avatar'] = channel_info.get("avatar", "")
             results.append(info)
     return results
 
