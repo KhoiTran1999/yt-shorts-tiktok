@@ -82,16 +82,38 @@ def get_channel_details(channel_id):
         response = requests.get(url, headers=headers, timeout=10)
         html = response.text
         
+        # 1. Lấy Tên
         channel_name = f"Channel {channel_id}"
         name_match = re.search(r'<meta property="og:title" content="(.*?)">', html)
         if name_match: channel_name = name_match.group(1)
         
+        # 2. Lấy Avatar
         avatar_url = "https://via.placeholder.com/150"
         avatar_match = re.search(r'<meta property="og:image" content="(.*?)">', html)
         if avatar_match: avatar_url = avatar_match.group(1)
+
+        # 3. Lấy Mô tả (Nâng cấp)
+        description = ""
         
-        return channel_name, avatar_url
-    except: return f"Channel {channel_id}", "https://via.placeholder.com/150"
+        # Cách 1: Thử tìm trong JSON (Thường chứa full text nhất)
+        json_match = re.search(r'"description":\{"simpleText":"(.*?)"\}', html)
+        if json_match:
+            # Giải mã ký tự xuống dòng của JSON
+            description = json_match.group(1).replace('\\n', '\n')
+        
+        # Cách 2: Nếu không có JSON, dùng thẻ Meta (Thêm re.DOTALL để lấy xuống dòng)
+        if not description:
+            desc_match = re.search(r'<meta property="og:description" content="(.*?)">', html, re.DOTALL)
+            if desc_match: description = desc_match.group(1)
+        
+        # Cleanup: Xóa các ký tự thừa nếu có
+        if description:
+            description = description.replace('&quot;', '"').replace('&#39;', "'")
+
+        return channel_name, avatar_url, description
+    except Exception as e:
+        print(f"⚠️ Lỗi lấy info kênh {channel_id}: {e}")
+        return f"Channel {channel_id}", "https://via.placeholder.com/150", ""
 
 def get_channel_id_from_url(url):
     try:
@@ -131,9 +153,10 @@ def sync_channel_data(channel_id, limit=100):
 
     print(f"✅ Worker: Quét xong {count} video cho kênh {channel_id}.")
 
-    # Cập nhật lại Avatar/Tên kênh luôn cho mới
-    new_name, new_avatar = get_channel_details(channel_id)
-    add_channel_to_db(channel_id, new_name, new_avatar)
+    # Cập nhật lại Avatar/Tên/Mô tả 
+    new_name, new_avatar, new_desc = get_channel_details(channel_id)
+    # Gọi hàm DB mới có thêm tham số description
+    add_channel_to_db(channel_id, new_name, new_avatar, new_desc)
     
     return True
 

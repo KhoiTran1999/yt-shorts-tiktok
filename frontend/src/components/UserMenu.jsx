@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { FaPlus, FaList, FaSignOutAlt } from 'react-icons/fa';
+import { FaPlus, FaList, FaSignOutAlt, FaCompass } from 'react-icons/fa';
 
-const UserMenu = ({ user, onLogout, onOpenAddChannel, onOpenSubs }) => {
+const UserMenu = ({ user, onLogout, onOpenAddChannel, onOpenSubs, onOpenExplore }) => {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
@@ -38,6 +38,10 @@ const UserMenu = ({ user, onLogout, onOpenAddChannel, onOpenSubs }) => {
             <MenuItem 
               icon={<FaList />} label="Danh sách kênh" 
               onClick={() => { setIsOpen(false); onOpenSubs(); }} 
+            />
+            <MenuItem 
+              icon={<FaCompass />} label="Khám phá kênh" 
+              onClick={() => { setIsOpen(false); onOpenExplore(); }} 
             />
             <div style={{ height: '1px', background: '#3e3f4b', margin: '5px 0' }}></div>
             <MenuItem 

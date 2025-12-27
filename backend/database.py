@@ -9,13 +9,14 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 r = redis.from_url(REDIS_URL, decode_responses=True)
 
 # === CÁC HÀM XỬ LÝ CHANNEL ===
-def add_channel_to_db(channel_id, name, avatar_url):
+def add_channel_to_db(channel_id, name, avatar_url, description=""):
     """Lưu thông tin kênh vào Hash"""
     key = f"channel:{channel_id}:info"
     data = {
         "id": channel_id,
         "name": name,
         "avatar": avatar_url,
+        "description": description, # <-- MỚI: Lưu mô tả
         "last_sync": int(time.time())
     }
     r.hset(key, mapping=data)
@@ -218,6 +219,17 @@ def get_channels_info(channel_ids):
     for cid in channel_ids:
         info = r.hgetall(f"channel:{cid}:info")
         if info: channels.append(info)
+    return channels
+
+def get_all_channels():
+    """Lấy danh sách thông tin tất cả các kênh trong hệ thống"""
+    # Lấy tất cả key có dạng channel:*:info
+    keys = r.keys("channel:*:info")
+    channels = []
+    for key in keys:
+        info = r.hgetall(key)
+        if info:
+            channels.append(info)
     return channels
 
 def get_user_subscriptions(user_id):

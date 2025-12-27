@@ -54,6 +54,10 @@ class UnsubRequest(BaseModel):
     user_id: str
     channel_id: str
 
+class SimpleSubRequest(BaseModel):
+    user_id: str
+    channel_id: str
+
 # === CHỨC NĂNG TỰ ĐỘNG CRAWL (AUTO-SCHEDULER) ===
 def job_daily_crawl():
     print("⏰ [Auto-Scan] Bắt đầu quét định kỳ lúc 03:00 AM...")
@@ -205,6 +209,31 @@ def unsubscribe(req: UnsubRequest):
     msg = "Đã bỏ theo dõi."
     if is_deleted: msg += " Kênh này đã bị xóa vì không còn ai follow."
     return {"status": "ok", "message": msg}
+
+# --- API TÍNH NĂNG KHÁM PHÁ (EXPLORE) ---
+
+@app.get("/api/channels/explore")
+def get_explore_channels(user_id: str):
+    # 1. Lấy tất cả kênh
+    all_channels = db.get_all_channels()
+    
+    # 2. Lấy danh sách ID các kênh user đã sub
+    sub_ids = db.get_user_subscriptions(user_id)
+    
+    # 3. Lọc: Chỉ lấy kênh KHÔNG nằm trong danh sách sub
+    # (Nếu sub_ids rỗng thì lấy hết)
+    explore_list = [c for c in all_channels if c['id'] not in sub_ids]
+    
+    return explore_list
+
+@app.post("/api/subscribe/quick")
+def quick_subscribe(req: SimpleSubRequest):
+    """API theo dõi nhanh, không cần URL, chỉ cần ID"""
+    if not db.is_channel_exist(req.channel_id):
+        raise HTTPException(status_code=404, detail="Kênh không tồn tại")
+        
+    db.subscribe_channel(req.user_id, req.channel_id)
+    return {"status": "ok", "message": f"Đã theo dõi kênh {req.channel_id}"}
 
 @app.post("/api/auth/google")
 def login_google(request: LoginRequest):

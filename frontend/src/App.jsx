@@ -6,6 +6,7 @@ import LoginButton from './components/LoginButton';
 import AddChannelModal from './components/AddChannelModal';
 import SubsModal from './components/SubsModal';
 import UserMenu from './components/UserMenu';
+import ExploreModal from './components/ExploreModal';
 import './App.css';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
   const [refreshKey, setRefreshKey] = useState(0); 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSubsModal, setShowSubsModal] = useState(false);
+  const [showExploreModal, setShowExploreModal] = useState(false);
 
   // --- TRẠNG THÁI TOÀN CỤC ---
   const [isCaptionOn, setIsCaptionOn] = useState(true);
@@ -44,6 +46,7 @@ function App() {
             onLogout={handleLogout}
             onOpenAddChannel={() => setShowAddModal(true)}
             onOpenSubs={() => setShowSubsModal(true)}
+            onOpenExplore={() => setShowExploreModal(true)}
           />
           <AddChannelModal 
             userId={user.id} 
@@ -56,6 +59,12 @@ function App() {
             onListChanged={() => setRefreshKey(prev => prev + 1)}
             isOpen={showSubsModal}
             onClose={() => setShowSubsModal(false)}
+          />
+          <ExploreModal 
+              userId={user.id}
+              isOpen={showExploreModal}
+              onClose={() => setShowExploreModal(false)}
+              onListChanged={() => setRefreshKey(prev => prev + 1)}
           />
         </>
       )}
