@@ -9,6 +9,9 @@ import worker
 import random
 import os
 from dotenv import load_dotenv
+import schedule
+import threading
+import time
 
 load_dotenv()
 
@@ -50,6 +53,45 @@ class ChannelRequest(BaseModel):
 class UnsubRequest(BaseModel):
     user_id: str
     channel_id: str
+
+# === CHỨC NĂNG TỰ ĐỘNG CRAWL (AUTO-SCHEDULER) ===
+def job_daily_crawl():
+    print("⏰ [Auto-Scan] Bắt đầu quét định kỳ lúc 03:00 AM...")
+    try:
+        # Lấy tất cả key thông tin kênh từ Redis
+        # Pattern: channel:CHANNEL_ID:info
+        keys = db.r.keys("channel:*:info")
+        
+        count = 0
+        for key in keys:
+            # Tách chuỗi để lấy Channel ID
+            # key ví dụ: "channel:UC123abc:info" -> lấy phần tử số 1 là UC123abc
+            channel_id = key.split(":")[1]
+            
+            # Gọi worker với limit=10
+            worker.sync_channel_data(channel_id, limit=10)
+            count += 1
+            
+        print(f"✅ [Auto-Scan] Đã quét xong {count} kênh.")
+        
+    except Exception as e:
+        print(f"⚠️ [Auto-Scan] Lỗi: {e}")
+
+def run_scheduler_thread():
+    """Hàm chạy vòng lặp kiểm tra giờ trong luồng riêng"""
+    while True:
+        schedule.run_pending()
+        time.sleep(60) # Kiểm tra mỗi phút 1 lần
+
+# Thiết lập lịch chạy vào 03:00 sáng mỗi ngày
+schedule.every().day.at("03:00").do(job_daily_crawl)
+
+# Khởi động Scheduler trong luồng riêng (Daemon Thread)
+# Để nó chạy song song với FastAPI mà không chặn server
+threading.Thread(target=run_scheduler_thread, daemon=True).start()
+
+#============================================================
+# === API ENDPOINTS ===
 
 # --- API CHÍNH: GET FEED (ĐÃ SỬA LOGIC) ---
 @app.get("/api/feed", response_model=List[VideoResponse])

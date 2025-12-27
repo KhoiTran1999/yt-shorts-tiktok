@@ -105,12 +105,12 @@ def get_channel_id_from_url(url):
     except: return None
 
 # === 5. WORKER CHÍNH ===
-def sync_channel_data(channel_id):
+def sync_channel_data(channel_id, limit=100):
     """Hàm cốt lõi: Quét video từ ID kênh và lưu vào DB"""
     print(f"🚀 Worker: Bắt đầu quét video kênh {channel_id}...")
     try:
-        # Lấy 100 video mới nhất
-        videos = scrapetube.get_channel(channel_id=channel_id, content_type="shorts", sleep=1, limit=100)
+        # Lấy số video mới nhất theo limit
+        videos = scrapetube.get_channel(channel_id=channel_id, content_type="shorts", sleep=1, limit=limit)
         count = 0
         for video in videos:
             try:
