@@ -263,7 +263,6 @@ def get_subscribed_video_ids(user_id, limit=200, offset=0, sort_by="score_asc"):
     if not subs: return []
 
     # 1. Gom tất cả video của các kênh đã sub
-    # keys_to_union = [channel:1:videos, channel:2:videos...]
     keys_to_union = [f"channel:{cid}:videos" for cid in subs]
     
     if not keys_to_union: return []
@@ -277,8 +276,10 @@ def get_subscribed_video_ids(user_id, limit=200, offset=0, sort_by="score_asc"):
     # Logic: Chỉ lấy những video nằm trong temp_sub_all, nhưng dùng Score của videos:score
     temp_final = f"temp:sub_scored:{user_id}"
     
-    # weights=[0, 1]: Lấy 0% điểm timestamp + 100% điểm view
-    r.zinterstore(temp_final, keys=[temp_sub_all, "videos:score"], weights=[0, 1])
+    # === 👇 DÒNG ĐÃ SỬA Ở ĐÂY 👇 ===
+    # Thay vì weights=[0, 1], ta truyền dictionary
+    r.zinterstore(temp_final, keys={temp_sub_all: 0, "videos:score": 1})
+    
     r.expire(temp_final, 60)
 
     # 3. Lấy ID ra theo thứ tự mong muốn
