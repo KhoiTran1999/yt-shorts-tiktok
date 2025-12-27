@@ -192,6 +192,13 @@ const VideoFeed = ({ userId, isCaptionOn, onToggleCaption, isMutedGlobal, onTogg
           />
        </div>
 
+       {videos.length === 0 && loading && (
+          <div className="loading-overlay">
+              <div className="css-spinner"></div>
+              <p style={{fontSize: '14px', color: '#ccc'}}>Đang tải video...</p>
+          </div>
+       )}
+
        <Swiper
         modules={[Mousewheel, Keyboard, Virtual]}
         direction={'vertical'}
