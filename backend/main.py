@@ -114,13 +114,19 @@ def get_feed(user_id: Optional[str] = None, page: int = 1, limit: int = 10):
     if user_id:
         subs = db.get_user_subscriptions(user_id)
         if subs:
-            # Nếu có sub: Lấy 200 video từ các kênh sub
+            # Ưu tiên 1: Lấy video từ kênh đã sub
             raw_videos = db.get_subscribed_videos(user_id, limit=POOL_SIZE, offset=0)
+            
+            # --- ĐOẠN MỚI THÊM VÀO ---
+            # Fallback: Nếu đã sub nhưng chưa cào được video nào (raw_videos rỗng)
+            # Thì lấy tạm video Global cho user xem đỡ buồn
+            if not raw_videos:
+                print(f"⚠️ User {user_id} có sub nhưng chưa có video -> Fallback sang Global")
+                raw_videos = db.get_global_videos(limit=POOL_SIZE, offset=0)
+            # --------------------------
         else:
-            # Nếu không sub: Lấy 200 video global
             raw_videos = db.get_global_videos(limit=POOL_SIZE, offset=0)
     else:
-        # Khách: Lấy 200 video global
         raw_videos = db.get_global_videos(limit=POOL_SIZE, offset=0)
 
     # Xử lý dữ liệu thô
@@ -187,11 +193,26 @@ def add_channel(request: ChannelRequest, background_tasks: BackgroundTasks):
 def sync_specific_channel(channel_id: str, background_tasks: BackgroundTasks):
     """
     API để user chủ động làm mới 1 kênh.
-    Chạy ngầm trong background (không bắt user đợi).
+    Có cơ chế chống Spam: Chỉ cho phép cập nhật 1 lần mỗi 10 phút.
     """
     if not db.is_channel_exist(channel_id):
          raise HTTPException(status_code=404, detail="Kênh không tồn tại")
     
+    # --- ĐOẠN CODE MỚI: KIỂM TRA CHỐNG SPAM ---
+    # 1. Lấy thông tin lần cập nhật cuối
+    info = db.r.hgetall(f"channel:{channel_id}:info")
+    last_sync = int(info.get("last_sync", 0))
+    now = int(time.time())
+    
+    # 2. Nếu vừa cập nhật trong vòng 10 phút (600 giây) -> BỎ QUA
+    # Giúp server không bị quá tải vì nhiều người cùng bấm
+    if now - last_sync < 600:
+         return {
+             "status": "ignored", 
+             "message": "Kênh này vừa được cập nhật, vui lòng đợi thêm vài phút!"
+         }
+    # -------------------------------------------
+
     # Đẩy vào worker chạy ngầm
     background_tasks.add_task(worker.sync_channel_by_id, channel_id)
     
