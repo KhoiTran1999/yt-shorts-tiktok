@@ -100,63 +100,54 @@ threading.Thread(target=run_scheduler_thread, daemon=True).start()
 # --- API CHÍNH: GET FEED (ĐÃ SỬA LOGIC) ---
 @app.get("/api/feed", response_model=List[VideoResponse])
 def get_feed(user_id: Optional[str] = None, page: int = 1, limit: int = 10):
-    # offset = (page - 1) * limit  <-- KHÔNG DÙNG OFFSET KIỂU CŨ NỮA
+    POOL_SIZE = 200  # Lấy pool lớn ID để random
+    video_ids = []
     
-    clean_videos = []
-    
-    # --- LOGIC MỚI: RANDOM POOL ---
-    # Thay vì lấy từng trang nhỏ, ta lấy 1 lượng lớn video gần đây (Pool)
-    # Ví dụ: Lấy 200 video mới nhất để trộn
-    POOL_SIZE = 200 
-    
-    raw_videos = []
-    
+    # CHỌN CHIẾN THUẬT SORT Ở ĐÂY:
+    # "time": Mới nhất
+    # "score_asc": Ít view nhất (Giống logic cũ của bạn)
+    # "score_desc": Nhiều view nhất (Trending)
+    STRATEGY = "score_asc"
+
+    # 1. CHỈ LẤY DANH SÁCH ID (Rất nhanh, chưa lấy thông tin chi tiết)
     if user_id:
         subs = db.get_user_subscriptions(user_id)
         if subs:
-            # Ưu tiên 1: Lấy video từ kênh đã sub
-            raw_videos = db.get_subscribed_videos(user_id, limit=POOL_SIZE, offset=0)
+            # Lấy video sub theo điểm
+            video_ids = db.get_subscribed_video_ids(user_id, limit=POOL_SIZE, sort_by=STRATEGY)
             
-            # --- ĐOẠN MỚI THÊM VÀO ---
-            # Fallback: Nếu đã sub nhưng chưa cào được video nào (raw_videos rỗng)
-            # Thì lấy tạm video Global cho user xem đỡ buồn
-            if not raw_videos:
-                print(f"⚠️ User {user_id} có sub nhưng chưa có video -> Fallback sang Global")
-                raw_videos = db.get_global_videos(limit=POOL_SIZE, offset=0)
-            # --------------------------
+            if not video_ids:
+                # Fallback sang global nếu sub chưa có gì
+                video_ids = db.get_global_video_ids(limit=POOL_SIZE, sort_by=STRATEGY)
         else:
-            raw_videos = db.get_global_videos(limit=POOL_SIZE, offset=0)
+            video_ids = db.get_global_video_ids(limit=POOL_SIZE, sort_by=STRATEGY)
     else:
-        raw_videos = db.get_global_videos(limit=POOL_SIZE, offset=0)
+        video_ids = db.get_global_video_ids(limit=POOL_SIZE, sort_by=STRATEGY)
 
-    # Xử lý dữ liệu thô
-    temp_list = []
-    for v in raw_videos:
-        channel_info = db.r.hgetall(f"channel:{v['channel_id']}:info")
-        channel_name = channel_info.get("name", f"@{v['channel_id']}")
-        channel_avatar = channel_info.get("avatar", "https://via.placeholder.com/150")
-        
-        temp_list.append({
+    # 2. TRỘN ID VÀ CẮT (Thao tác trên RAM, cực nhanh)
+    if video_ids:
+        random.shuffle(video_ids)
+        selected_ids = video_ids[:limit] # Chỉ lấy đúng số lượng cần thiết (VD: 5 ID)
+    else:
+        selected_ids = []
+
+    # 3. BÂY GIỜ MỚI GỌI REDIS ĐỂ LẤY DATA (Chỉ tốn query cho 5 video thay vì 200)
+    # Hàm này trong database.py đã tự lấy luôn thông tin Channel rồi
+    final_videos = db.get_videos_from_ids(selected_ids)
+    
+    # 4. Map dữ liệu trả về cho đúng format Frontend
+    clean_videos = []
+    for v in final_videos:
+        clean_videos.append({
             "id": v['id'],
             "channel_id": v['channel_id'],
-            "channel_name": channel_name,
-            "channel_avatar": channel_avatar,
+            "channel_name": v.get('channel_name', "Unknown"),
+            "channel_avatar": v.get('channel_avatar', "https://via.placeholder.com/150"),
             "title": v['title'],
             "thumbnail": v['thumbnail'],
             "published_at": int(v['published_at']),
             "embed_url": f"https://www.youtube.com/embed/{v['id']}?autoplay=0"
         })
-
-    # --- THUẬT TOÁN TRỘN ---
-    if len(temp_list) > 0:
-        # 1. Trộn ngẫu nhiên toàn bộ Pool
-        random.shuffle(temp_list)
-        
-        # 2. Giả lập phân trang bằng cách cắt list đã trộn
-        # Lưu ý: Cách này có nhược điểm là có thể lặp lại video nếu reload, 
-        # nhưng trải nghiệm lướt sẽ "random" hơn nhiều.
-        # Để đơn giản cho giai đoạn này, ta cứ trả về ngẫu nhiên 'limit' video từ pool.
-        clean_videos = temp_list[:limit]
     
     return clean_videos
 
